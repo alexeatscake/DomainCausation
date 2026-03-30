@@ -37,13 +37,12 @@ __pypackages__/
 # Environments
 .venv
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
 # ruff
 .ruff_cache/
+
+# tests
+.pytest_cache/
+.coverage
 
 # OS specific stuff
 .DS_Store
