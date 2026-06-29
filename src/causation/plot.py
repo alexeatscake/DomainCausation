@@ -129,11 +129,11 @@ def plot_dataset_with_boundaries(
             for _, lbl, ls, c in boundary_specs
         ],
     ]
-    ax.legend(handles=legend_handles, loc="best", framealpha=0.85, fontsize=9)
+    ax.legend(handles=legend_handles, loc="best", framealpha=0.85, fontsize=9, ncol=2)
 
-    ax.set_xlabel("Low Audio", fontsize=14)
-    ax.set_ylabel("High Audio", fontsize=14)
-    ax.set_title(title, fontsize=15)
+    ax.set_xlabel("Low Audio", fontsize=16)
+    ax.set_ylabel("High Audio", fontsize=16)
+    ax.set_title(title, fontsize=18)
     ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.4)
 
     # Ticks: inward, mirrored on both axes, with minor ticks

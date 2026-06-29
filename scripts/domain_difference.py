@@ -16,7 +16,7 @@ if __name__ == "__main__":
         cov2=COV,
         loss1=-0.5,
         loss2=0.5,
-        title="With Label Loss",
+        title="With Confounding",
         random_seed=1337,
         save_path=Path(__file__).parent.parent / "figures" / "domain_difference.png",
     )
