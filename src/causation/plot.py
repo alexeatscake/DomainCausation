@@ -1,10 +1,14 @@
 """Plotting utilities and main demo entry point."""
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
+import matplotlib.axes
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.stats import gaussian_kde
 
 from .data import generate_two_gaussians
 from .models import decision_boundary_y, fit_models
@@ -15,6 +19,214 @@ _D1_TRUE = "#f4877a"  # light warm red
 _D1_FALSE = "#7aaaf4"  # light sky blue
 _D2_TRUE = "#8b1e0e"  # dark red, hue shifted toward brown-red
 _D2_FALSE = "#0e2e8b"  # dark blue, hue shifted toward indigo
+
+# Control-collapse demo palette: colour = class, marker = domain.
+RED = "#d1495b"  # class 0
+BLUE = "#3a78c3"  # class 1
+GREEN = "#2e8b57"  # held-out domain (never fit to)
+DOMAIN_C = "#7b3fbf"  # domain classifier and the divider perpendicular to it
+
+
+@dataclass
+class Line:
+    """A pre-computed line to draw on an axes (no calculation done at plot time)."""
+
+    xs: np.ndarray
+    ys: np.ndarray
+    style: str = "-"
+    color: str = "k"
+    width: float = 2.0
+    label: str | None = None
+
+
+def feature_limits(
+    X: np.ndarray,
+    extra_X: np.ndarray | None = None,
+    top_headroom: float = 0.1,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Axis limits spanning *X* (and optional held-out *extra_X*), with headroom.
+
+    The y-axis is extended at the top by ``top_headroom`` of the padded axis
+    length, leaving room for legends in the top corners.
+
+    Returns ``(xlim, ylim)``.
+    """
+    allX = X if extra_X is None or len(extra_X) == 0 else np.vstack([X, extra_X])
+    xlim = (allX[:, 0].min() - 0.6, allX[:, 0].max() + 0.6)
+    ylow = allX[:, 1].min() - 0.6
+    yhigh = allX[:, 1].max() + 0.6
+    ylim = (ylow, yhigh + top_headroom * (yhigh - ylow))
+    return xlim, ylim
+
+
+def draw_image_panel(ax: matplotlib.axes.Axes, image_path: str | Path) -> None:
+    """Fill *ax* with a static image (e.g. a DAG), with no axes or frame."""
+    ax.imshow(plt.imread(Path(image_path)))
+    ax.axis("off")
+
+
+def draw_feature_panel(
+    ax: matplotlib.axes.Axes,
+    X: np.ndarray,
+    cls: np.ndarray,
+    dom: np.ndarray,
+    lines: Sequence[Line] = (),
+    extra_X: np.ndarray | None = None,
+    extra_cls: np.ndarray | None = None,
+    xlim: tuple[float, float] | None = None,
+    ylim: tuple[float, float] | None = None,
+) -> None:
+    """Fill *ax* with the 2D feature space: scatter, held-out domain, and lines.
+
+    Performs no model calculation — *lines* are already-computed :class:`Line`
+    objects (see :func:`causation.models.boundary_line`).
+
+    Parameters
+    ----------
+    ax : matplotlib Axes
+    X, cls, dom : the fitted points and their class/domain labels
+    lines : list of Line
+        Boundaries / dividers to overlay.
+    extra_X, extra_cls : optional held-out (green) points and their true class
+    xlim : optional x-limits; computed from the data if omitted
+    """
+    if xlim is None or ylim is None:
+        default_xlim, default_ylim = feature_limits(X, extra_X)
+        xlim = xlim if xlim is not None else default_xlim
+        ylim = ylim if ylim is not None else default_ylim
+
+    # Fitted points: colour = class, marker = domain.
+    for c, col in [(0, RED), (1, BLUE)]:
+        for d, mk in [(0, "o"), (1, "s")]:
+            m = (cls == c) & (dom == d)
+            ax.scatter(
+                X[m, 0],
+                X[m, 1],
+                c=col,
+                marker=mk,
+                s=28,
+                alpha=0.85,
+                edgecolors="black",
+                linewidths=0.5,
+            )
+
+    # Held-out domain: green fill, edge coloured by true class.
+    if extra_X is not None and len(extra_X) and extra_cls is not None:
+        for c, edge in [(0, RED), (1, BLUE)]:
+            m = extra_cls == c
+            if m.any():
+                ax.scatter(
+                    extra_X[m, 0],
+                    extra_X[m, 1],
+                    c=GREEN,
+                    marker="^",
+                    s=34,
+                    alpha=0.85,
+                    edgecolors=edge,
+                    linewidths=1.3,
+                )
+
+    line_handles = []
+    for line in lines:
+        (artist,) = ax.plot(
+            line.xs,
+            line.ys,
+            color=line.color,
+            ls=line.style,
+            lw=line.width,
+            label=line.label,
+        )
+        line_handles.append(artist)
+
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_xlabel("Low Audio", fontsize=13)
+    ax.set_ylabel("High Audio", fontsize=13)
+
+    # Two legends: one for the boundary lines, one for the point encoding
+    # (colour = class, marker = domain). add_artist keeps the first when the
+    # second legend is drawn.
+    def _marker(color, marker, label, edge="black"):
+        return mlines.Line2D(
+            [],
+            [],
+            color=color,
+            marker=marker,
+            linestyle="None",
+            markersize=7,
+            markeredgecolor=edge,
+            markeredgewidth=0.5,
+            label=label,
+        )
+
+    data_handles = [
+        _marker(RED, "o", "class 0 (red)"),
+        _marker(BLUE, "o", "class 1 (blue)"),
+        _marker("0.6", "o", "domain 0 (circle)"),
+        _marker("0.6", "s", "domain 1 (square)"),
+    ]
+    if extra_X is not None and len(extra_X):
+        data_handles.append(_marker(GREEN, "^", "held-out (not fit)"))
+
+    if line_handles:
+        ax.add_artist(ax.legend(handles=line_handles, loc="upper right", fontsize=8))
+    ax.legend(handles=data_handles, loc="upper left", fontsize=8)
+
+    # Inward, mirrored ticks with minor ticks (matches the house style).
+    ax.tick_params(
+        axis="both", which="major", direction="in", top=True, right=True, length=6
+    )
+    ax.tick_params(
+        axis="both", which="minor", direction="in", top=True, right=True, length=3
+    )
+    ax.minorticks_on()
+
+
+def _density(ax, scores, mask, color, label):
+    s = scores[mask]
+    kde = gaussian_kde(s)
+    grid = np.linspace(scores.min() * 1.05, scores.max() * 1.05, 400)
+    ax.fill_between(grid, kde(grid), color=color, alpha=0.35)
+    ax.plot(grid, kde(grid), color=color, lw=2.2, label=label)
+
+
+def draw_collapse_panel(
+    ax: matplotlib.axes.Axes,
+    scores: np.ndarray,
+    cls: np.ndarray,
+    thr: float | None = None,
+    xlabel: str = "Divider  (projection ⊥ to domain classifier)",
+) -> None:
+    """Fill *ax* with the per-class densities along the collapsed axis.
+
+    Parameters
+    ----------
+    ax : matplotlib Axes
+    scores : 1D projection of each point onto the collapse axis
+    cls : class labels (0/1)
+    thr : optional class threshold to mark with a vertical line
+    xlabel : label for the collapse axis
+    """
+    _density(ax, scores, cls == 0, RED, "red class")
+    _density(ax, scores, cls == 1, BLUE, "blue class")
+    if thr is not None:
+        ax.axvline(
+            thr, color=DOMAIN_C, ls="--", lw=2, alpha=1.0, label="class threshold"
+        )
+    ax.set_xlabel(xlabel, fontsize=13)
+    ax.set_ylabel("Density", fontsize=13)
+    ax.legend(loc="upper right", fontsize=9)
+    ax.set_xlim(scores.min() * 1.05, scores.max() * 1.05)
+    ax.set_ylim(bottom=0.0)
+
+    # Inward, mirrored ticks with minor ticks (matches the house style).
+    ax.tick_params(
+        axis="both", which="major", direction="in", top=True, right=True, length=6
+    )
+    ax.tick_params(
+        axis="both", which="minor", direction="in", top=True, right=True, length=3
+    )
+    ax.minorticks_on()
 
 
 def plot_dataset_with_boundaries(

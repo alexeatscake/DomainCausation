@@ -1,6 +1,52 @@
 """Data generation for the two-Gaussian classification demo."""
 
+from dataclasses import dataclass
+
 import numpy as np
+
+
+@dataclass
+class Blob:
+    """One Gaussian cluster for a (class, domain) combination."""
+
+    cls: int  # 0 red, 1 blue  (the thing we predict)
+    dom: int  # 0 circle, 1 square  (the thing we control for)
+    centre: tuple[float, float]  # (x, y) centroid
+    n: int = 200  # number of points
+
+
+def generate_blobs(
+    blobs: list[Blob],
+    noise: float = 1.0,
+    seed: int | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Sample one isotropic Gaussian cluster per blob.
+
+    Parameters
+    ----------
+    blobs : list of Blob
+        One cluster per (class, domain) combination.
+    noise : float
+        Standard deviation of the Gaussian spread around each centre.
+    seed : int or None
+        Seed for the random number generator.
+
+    Returns
+    -------
+    X : ndarray, shape (n, 2)
+        Stacked points from every blob.
+    cls : ndarray of int, shape (n,)
+        Class label (0/1) for each point.
+    dom : ndarray of int, shape (n,)
+        Domain label for each point.
+    """
+    rng = np.random.default_rng(seed)
+    Xs, cs, ds = [], [], []
+    for blob in blobs:
+        Xs.append(rng.normal(loc=blob.centre, scale=noise, size=(blob.n, 2)))
+        cs.append(np.full(blob.n, blob.cls))
+        ds.append(np.full(blob.n, blob.dom))
+    return np.vstack(Xs), np.concatenate(cs), np.concatenate(ds)
 
 
 def _apply_label_loss(

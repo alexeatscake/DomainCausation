@@ -1,5 +1,11 @@
 figures/*
 !figures/README.md
+# DAG source images are inputs (needed by CI), not generated outputs.
+!figures/dag_images/
+!figures/dag_images/*.png
+
+# Scratch prototypes (kept locally, not tracked)
+scratch/
 
 ## - GENERAL - ##
 
